@@ -2,10 +2,11 @@ const express = require('express');
 const router = express.Router();
 const {
   createReceipt,
-  getStudentsPaymentStatus
+  getStudentsPaymentStatus,
+  downloadReceipt
 } = require('../controllers/receiptController');
 
 router.post('/', createReceipt);
-router.get('/students-payment', getStudentsPaymentStatus);
+router.get('/:id/download', downloadReceipt);
 
 module.exports = router;

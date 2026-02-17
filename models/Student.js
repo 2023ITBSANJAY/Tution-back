@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs');
 
 const StudentSchema = new mongoose.Schema({
   studentId: {
@@ -8,33 +9,53 @@ const StudentSchema = new mongoose.Schema({
   },
   name: { type: String, required: true },
   email: { type: String, required: true, unique: true },
-  mobile: { type: String }
+  mobile: { type: String },
+  password: { type: String, required: true }
 }, { timestamps: true });
 
 // Auto-generate studentId like DT001, DT002... up to DT20000
 StudentSchema.pre('validate', async function (next) {
-  if (this.isNew && !this.studentId) {
-    try {
-      const lastStudent = await mongoose.model('Student').findOne().sort({ createdAt: -1 });
-      let newNumber = 1;
+  if (this.isNew) {
+    // 1. Generate Student ID if missing
+    if (!this.studentId) {
+      try {
+        const lastStudent = await mongoose.model('Student').findOne().sort({ createdAt: -1 });
+        let newNumber = 1;
 
-      if (lastStudent && lastStudent.studentId) {
-        const lastNum = parseInt(lastStudent.studentId.replace('DT', ''), 10);
-        if (!isNaN(lastNum)) newNumber = lastNum + 1;
+        if (lastStudent && lastStudent.studentId) {
+          const lastNum = parseInt(lastStudent.studentId.replace('DT', ''), 10);
+          if (!isNaN(lastNum)) newNumber = lastNum + 1;
+        }
+
+        if (newNumber > 20000) {
+          return next(new Error('Student ID limit reached (DT20000). Cannot create more students.'));
+        }
+
+        this.studentId = `DT${String(newNumber).padStart(3, '0')}`;
+      } catch (err) {
+        return next(err);
       }
-
-      // Stop at 20000
-      if (newNumber > 20000) {
-        return next(new Error('Student ID limit reached (DT20000). Cannot create more students.'));
-      }
-
-      this.studentId = `DT${String(newNumber).padStart(3, '0')}`;
-      next();
-    } catch (err) {
-      next(err);
     }
-  } else {
+
+    // 2. Set default password = studentId if password is not provided
+    if (!this.password) {
+      this.password = this.studentId;
+    }
+  }
+  next();
+});
+
+// Hash password before saving
+StudentSchema.pre('save', async function (next) {
+  if (!this.isModified('password')) {
+    return next();
+  }
+  try {
+    const salt = await bcrypt.genSalt(10);
+    this.password = await bcrypt.hash(this.password, salt);
     next();
+  } catch (err) {
+    next(err);
   }
 });
 
